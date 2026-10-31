@@ -1,4 +1,5 @@
 """Browser interface for the ESP32 document assistant."""
+import logging
 import os
 
 import streamlit as st
@@ -8,6 +9,7 @@ import voyageai
 
 from RAG import ROOT, answer, retrieve, source_label
 
+logger = logging.getLogger(__name__)
 load_dotenv(ROOT / ".env")
 st.set_page_config(page_title="ESP32 Docs Assistant", page_icon="🔍", layout="centered")
 
@@ -44,11 +46,14 @@ if submitted:
     elif not all(os.getenv(name) for name in ("MONGODB_URI", "VOYAGE_API_KEY", "GEMINI_API_KEY")):
         st.error("The app is missing its database or API configuration. Please contact the app owner.")
     else:
+        stage = "client initialization"
         try:
             with st.spinner("Searching the documentation and preparing an answer…"):
                 client, model = get_clients(os.environ["MONGODB_URI"], os.environ["VOYAGE_API_KEY"])
                 collection = client[os.getenv("MONGODB_DATABASE", "esp_rag")][os.getenv("MONGODB_COLLECTION", "chunks")]
+                stage = "Voyage embedding or MongoDB vector search"
                 results = retrieve(question.strip(), collection, model, top_k=8)
+                stage = "Gemini answer generation"
                 response = answer(question.strip(), results)
             st.subheader("Answer")
             st.write(response)
@@ -57,7 +62,8 @@ if submitted:
                 for i, chunk in enumerate(results, 1):
                     with st.expander(f"[S{i}] {source_label(chunk)}"):
                         st.text(chunk.get("text", ""))
-        except Exception:
+        except Exception as exc:
+            logger.error("Request failed during %s (%s)", stage, type(exc).__name__)
             st.error("The assistant could not complete the request. Please try again or contact the app owner.")
 
 st.divider()
