@@ -27,5 +27,3 @@ Ask questions about ESP32-C3, C6, S3, H2 and P4 datasheets and errata. The syste
    ```
 
 The first query downloads the Voyage 4 Nano embedding model. The application uses it locally to embed questions, searches Atlas for relevant chunks, and sends those passages to Gemini. Extracting the ZIP does not populate the database; the application requires the existing Atlas index. Check important specifications against the cited PDF pages.
-
-For more details, see the [project presentation](ESP32%20Docs%20RAG%20%E2%80%94%20Hackathon%20Demo.pptx).
