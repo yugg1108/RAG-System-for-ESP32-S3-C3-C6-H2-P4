@@ -63,7 +63,8 @@ if submitted:
                     with st.expander(f"[S{i}] {source_label(chunk)}"):
                         st.text(chunk.get("text", ""))
         except Exception as exc:
-            logger.error("Request failed during %s (%s)", stage, type(exc).__name__)
+            status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+            logger.error("Request failed during %s (%s, status=%s)", stage, type(exc).__name__, status if isinstance(status, int) else "unknown")
             st.error("The assistant could not complete the request. Please try again or contact the app owner.")
 
 st.divider()
