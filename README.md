@@ -1,33 +1,55 @@
 # ESP32 Docs RAG
 
-ESP32 Docs RAG is a question-answering system for ESP32-C3, C6, S3, H2 and P4 datasheets and errata. It helps users find relevant technical information across the five chip variants and provides source and page references with its answers.
+An AI assistant for exploring ESP32-C3, C6, S3, H2 and P4 datasheets and errata. Ask a question and receive an answer grounded in retrieved documentation, with source and page references.
 
-The system uses Voyage 4 Nano to create question embeddings locally, MongoDB Atlas Vector Search to retrieve matching document chunks, and Gemini to generate an answer from those passages.
+**[Open the live app](https://rag-system-for-esp32-s3-c3-c6-h2-p4-fqymbvkvsdruyxtafamr76.streamlit.app/)**
 
-## Setup
+The first question may take longer while the app loads its embedding model. For the project architecture and demo, see the [presentation](ESP32%20Docs%20RAG%20%E2%80%94%20Hackathon%20Demo.pptx).
 
-1. Download or clone the repository. Extract `data.zip` in the same folder as `RAG.py` and the other project files.
+## How it works
 
-2. Open a terminal in that folder and install the required libraries:
+1. Voyage 4 Nano embeds the question locally. The web app can optionally use the Voyage API instead.
+2. MongoDB Atlas Vector Search retrieves relevant document chunks and their metadata.
+3. Gemini generates an answer from the retrieved passages and cites its sources.
 
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
+## Run locally
 
-3. Place the provided `.env` file in the project folder. It contains the MongoDB connection string and Gemini API key used by the application. The MongoDB account must have access to the populated `esp_rag.chunks` collection and its `chunk_vector_index` vector index. Atlas must also allow your network connection.
+Install the dependencies in the project folder:
 
-The first query downloads the Voyage 4 Nano embedding model. Extracting the ZIP does not populate the database; the application requires the existing Atlas index. Check important specifications against the cited PDF pages.
+```bash
+python -m pip install -r requirements.txt
+```
 
-## Run
+Create a `.env` file in the same folder:
 
-Ask a question from the project folder:
+```dotenv
+MONGODB_URI="your_atlas_connection_string"
+GEMINI_API_KEY="your_gemini_api_key"
+```
+
+The Atlas database must already contain the embedded document chunks and a Vector Search index. By default, the app uses database `esp_rag`, collection `chunks`, and index `chunk_vector_index`, with 1024-dimensional vectors in the `embedding` field. The database user needs read access and Atlas must allow the client connection. The query code does not ingest PDFs or create the index.
+
+To run the web app:
+
+```bash
+python -m streamlit run app.py
+```
+
+To ask a question in the terminal:
 
 ```bash
 python RAG.py "What wireless protocols does ESP32-C6 support?"
 ```
 
-To retrieve more passages:
+## Configuration
 
-```bash
-python RAG.py "Compare ESP32-C3 and ESP32-C6 memory" --top-k 12
+The web app defaults to local Voyage 4 Nano embeddings. Its first run downloads the model and may be slow on a CPU. To use the hosted Voyage API for web app questions, add the following to `.env` or your hosting platform's secrets:
+
+```dotenv
+EMBEDDING_MODE="voyage_api"
+VOYAGE_API_KEY="your_voyage_api_key"
 ```
+
+The hosted mode uses `voyage-4-lite` with 1024 dimensions and is subject to API limits and charges. The command-line script continues to use the local model. Optional settings are `GEMINI_MODEL` (default `gemini-3.8-flash`), `MONGODB_DATABASE`, `MONGODB_COLLECTION` and `MONGODB_VECTOR_INDEX`.
+
+Keep API keys and connection strings private; do not commit `.env` to GitHub. Answers depend on the available indexed passages, and PDF tables may be extracted imperfectly. Verify important specifications in the cited documents.
