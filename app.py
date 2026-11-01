@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 import voyageai
 
-from RAG import ROOT, answer, retrieve, source_label
+from RAG import ROOT, answer, load_model, retrieve, source_label
 
 logger = logging.getLogger(__name__)
 load_dotenv(ROOT / ".env")
@@ -36,8 +36,14 @@ class VoyageQueryModel:
 
 
 @st.cache_resource
-def get_clients(uri, voyage_key):
-    return MongoClient(uri, serverSelectionTimeoutMS=10000), VoyageQueryModel(voyageai.Client(api_key=voyage_key))
+def get_clients(uri, embedding_mode, voyage_key):
+    if embedding_mode == "local":
+        model = load_model()
+    elif embedding_mode == "voyage_api":
+        model = VoyageQueryModel(voyageai.Client(api_key=voyage_key))
+    else:
+        raise ValueError("EMBEDDING_MODE must be local or voyage_api")
+    return MongoClient(uri, serverSelectionTimeoutMS=10000), model
 
 
 st.title("ESP32 Docs Assistant")
@@ -51,18 +57,24 @@ with st.form("question_form"):
 if submitted:
     if not question.strip():
         st.warning("Enter a question to get started.")
-    elif not all(os.getenv(name) for name in ("MONGODB_URI", "VOYAGE_API_KEY", "GEMINI_API_KEY")):
+    elif not all(os.getenv(name) for name in ("MONGODB_URI", "GEMINI_API_KEY")) or (os.getenv("EMBEDDING_MODE", "local") == "voyage_api" and not os.getenv("VOYAGE_API_KEY")):
         st.error("The app is missing its database or API configuration. Please contact the app owner.")
     else:
         stage = "client initialization"
         try:
-            with st.spinner("Searching the documentation and preparing an answer…"):
-                client, model = get_clients(os.environ["MONGODB_URI"], os.environ["VOYAGE_API_KEY"])
+            with st.status("Preparing the assistant...", expanded=True) as progress:
+                st.write("Loading the embedding model and connecting to MongoDB. The first run can take longer.")
+                client, model = get_clients(os.environ["MONGODB_URI"], os.getenv("EMBEDDING_MODE", "local"), os.getenv("VOYAGE_API_KEY", ""))
                 collection = client[os.getenv("MONGODB_DATABASE", "esp_rag")][os.getenv("MONGODB_COLLECTION", "chunks")]
-                stage = "MongoDB vector search (or Voyage embedding; see preceding log line)"
+                stage = "query embedding or MongoDB vector search"
+                progress.update(label="Searching the documents...")
+                st.write("Embedding the question and searching MongoDB for relevant passages.")
                 results = retrieve(question.strip(), collection, model, top_k=8)
                 stage = "Gemini answer generation"
+                progress.update(label="Preparing the answer...")
+                st.write(f"Found {len(results)} passages. Generating the answer.")
                 response = answer(question.strip(), results)
+                progress.update(label="Finished", state="complete", expanded=False)
             st.subheader("Answer")
             st.write(response)
             if results:
