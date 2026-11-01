@@ -14,6 +14,10 @@ load_dotenv(ROOT / ".env")
 st.set_page_config(page_title="ESP32 Docs Assistant", page_icon="🔍", layout="centered")
 
 
+class VoyageEmbeddingError(Exception):
+    """Report the failing service without exposing API response details."""
+
+
 class VoyageQueryModel:
     """Adapter for the existing retrieval function using Voyage's hosted API."""
     def __init__(self, client):
@@ -21,9 +25,13 @@ class VoyageQueryModel:
 
     def encode_query(self, question, **kwargs):
         import numpy as np
-        result = self.client.embed(
-            [question], model="voyage-4-lite", input_type="query", output_dimension=1024
-        )
+        try:
+            result = self.client.embed(
+                [question], model="voyage-4-lite", input_type="query", output_dimension=1024
+            )
+        except Exception as exc:
+            logger.error("Voyage embedding failed (%s)", type(exc).__name__)
+            raise VoyageEmbeddingError("Voyage embedding failed") from None
         return np.asarray(result.embeddings[0], dtype=np.float32)
 
 
@@ -51,7 +59,7 @@ if submitted:
             with st.spinner("Searching the documentation and preparing an answer…"):
                 client, model = get_clients(os.environ["MONGODB_URI"], os.environ["VOYAGE_API_KEY"])
                 collection = client[os.getenv("MONGODB_DATABASE", "esp_rag")][os.getenv("MONGODB_COLLECTION", "chunks")]
-                stage = "Voyage embedding or MongoDB vector search"
+                stage = "MongoDB vector search (or Voyage embedding; see preceding log line)"
                 results = retrieve(question.strip(), collection, model, top_k=8)
                 stage = "Gemini answer generation"
                 response = answer(question.strip(), results)
